@@ -18,22 +18,24 @@ namespace Sol {
   #define V_LAYERS false
 #endif
 
+#define RENDER_EXTENSIONS { "VK_KHR_maintenance2", "VK_KHR_dynamic_rendering", "VK_KHR_swapchain", }
+#define COMPUTE_EXTENSIONS { }
+
 struct PickDeviceResult {
   VkPhysicalDevice device;
   uint32_t present_queue_index;
   uint32_t compute_queue_index;
   uint32_t graphics_queue_index;
-};
-
-struct RankDevicesResult {
-  VkPhysicalDevice first_device;
-  VkPhysicalDevice second_device;
-  uint32_t queue_count;
+  // Bool in struct is irrelevant here.
+  bool present_found = false;
+  bool compute_found = false;
+  bool graphics_found = false;
+  bool extensions_support = false;
 };
 
 struct Engine {
 public:
-  Allocator* allocator;
+  Allocator* cpu_allocator;
   void init();
   void kill();
   GLFWwindow* get_window();
@@ -42,8 +44,8 @@ private:
   GLFWwindow* window;
   VkSurfaceKHR surface;
   VkInstance instance;
-  VkDevice compute_device;
   VkDevice render_device;
+  VkDevice compute_device;
   // Initializations
   void init_window();
   void init_instance();
@@ -51,9 +53,8 @@ private:
   void init_surface();
   // Utility
   PickDeviceResult device_setup(bool compute, const char** ext_list, uint32_t list_size);
-  RankDevicesResult rank_devices(bool compute);
-  bool check_device_ext(VkPhysicalDevice device, VkDeviceCreateInfo *create_info);
-  bool check_device_layers(VkPhysicalDevice device, VkDeviceCreateInfo *create_info);
+  PickDeviceResult compute_device_setup(const char** ext_list, uint32_t list_size);
+  PickDeviceResult render_device_setup(const char** ext_list, uint32_t list_size);
 
   // Window input
   static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);

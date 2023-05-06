@@ -28,6 +28,8 @@ void Engine::kill() {
   DestroyDebugUtilsMessengerEXT(instance, debug_messenger, nullptr);
 #endif
 
+  vkDestroyDevice(render_device, nullptr);
+  vkDestroyDevice(compute_device, nullptr);
   vkDestroySurfaceKHR(instance, surface, nullptr);
   vkDestroyInstance(instance, nullptr);
 
@@ -70,7 +72,7 @@ void Engine::init_instance() {
   std::cout << "Initializing in debug mode...\n";
   const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
   Vec<const char*> exts;
-  exts.init(glfw_ext_count + 1, allocator);
+  exts.init(glfw_ext_count + 1, cpu_allocator);
   mem_cpy(exts.data, glfw_ext, 8 * glfw_ext_count);
   exts.length = glfw_ext_count;
   exts.push(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -108,163 +110,229 @@ void Engine::init_surface() {
     std::cerr << "FAILED TO INIT SURFACE\n";
     abort();
   }
-  std::cout << "Initialized window surface...\n";
 }
 
 void Engine::init_devices() {
-  const char* render_exts[] = {
-    "VK_KHR_maintenance2",
-    "VK_KHR_dynamic_rendering",
-    "VK_KHR_swapchain",
-  };
-  const char* compute_exts[] = { };
+
+  const char* render_extensions[] = RENDER_EXTENSIONS;
+  const char* compute_extensions[] = COMPUTE_EXTENSIONS;
+
   bool compute = true;
-  uint32_t compute_list_size = sizeof(compute_exts) / sizeof(const char*);
-  uint32_t render_list_size = sizeof(render_exts) / sizeof(const char*);
-  PickDeviceResult compute_device_phys = 
-    device_setup(compute, compute_exts, compute_list_size);
+  uint32_t render_list_size = sizeof(render_extensions) / sizeof(const char*);
+  uint32_t compute_list_size = sizeof(compute_extensions) / sizeof(const char*);
+
   PickDeviceResult render_device_phys = 
-    device_setup(!compute, render_exts, render_list_size);
+    device_setup(!compute, render_extensions, render_list_size);
+  PickDeviceResult compute_device_phys = 
+    device_setup(compute, compute_extensions, compute_list_size);
 
-  VkDeviceCreateInfo create_compute_info;
-  VkDeviceCreateInfo create_render_info;
+  const float queue_priorities[] = { 1.0f };
 
-  VkDeviceQueueCreateInfo render_queue_info;
-  render_queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  render_queue_info.flags = 0x0;
+  uint32_t render_queue_indices[] = {
+    render_device_phys.graphics_queue_index,
+    render_device_phys.present_queue_index,
+  };
+  uint32_t render_device_queue_count = 2;
+  VkDeviceQueueCreateInfo render_queue_infos[render_device_queue_count];
 
+  for(uint32_t i = 0; i < render_device_queue_count; ++i) {
+    render_queue_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    render_queue_infos[i].pNext = nullptr;
+    render_queue_infos[i].flags = 0x0;
+    render_queue_infos[i].queueFamilyIndex = render_queue_indices[i];
+    render_queue_infos[i].queueCount = 1;
+    render_queue_infos[i].pQueuePriorities = queue_priorities;
+  }
 
-  create_render_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  create_render_info.pNext = nullptr;
-  create_render_info.flags = 0x0;
-  create_render_info.queueCreateInfoCount = 1;
+  VkDeviceCreateInfo render_create_info;
+  render_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  render_create_info.pNext = nullptr;
+  render_create_info.flags = 0x0;
+  render_create_info.queueCreateInfoCount = render_device_queue_count;
+  render_create_info.pQueueCreateInfos = render_queue_infos;
+  render_create_info.enabledLayerCount = 0;
+  render_create_info.ppEnabledLayerNames = nullptr;
+  render_create_info.enabledExtensionCount = render_list_size;
+  render_create_info.ppEnabledExtensionNames = render_extensions;
+  // NOTE: I am interested to see when I will have to come back to this...
+  render_create_info.pEnabledFeatures = nullptr;
 
+  VkDeviceQueueCreateInfo compute_queue_infos[1];
+  compute_queue_infos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  compute_queue_infos[0].pNext = nullptr;
+  compute_queue_infos[0].flags = 0x0;
+  compute_queue_infos[0].queueFamilyIndex = compute_device_phys.compute_queue_index;
+  compute_queue_infos[0].queueCount = 1;
+  compute_queue_infos[0].pQueuePriorities = queue_priorities;
+
+  VkDeviceCreateInfo compute_create_info;
+  compute_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  compute_create_info.pNext = nullptr;
+  compute_create_info.flags = 0x0;
+  compute_create_info.queueCreateInfoCount = 1;
+  compute_create_info.pQueueCreateInfos = compute_queue_infos;
+  compute_create_info.enabledLayerCount = 0;
+  compute_create_info.ppEnabledLayerNames = nullptr;
+  compute_create_info.enabledExtensionCount = compute_list_size;
+  compute_create_info.ppEnabledExtensionNames = compute_extensions;
+  // NOTE: I am interested to see when I will have to come back to this...
+  compute_create_info.pEnabledFeatures = nullptr;
+
+  VkResult render_creation_check = vkCreateDevice(render_device_phys.device, &render_create_info, nullptr, &render_device);
+  // TODO: Something in the compute creation check is segfaulting...
+  // There will some stupid unitialized pointer in the compute setup func...
+  VkResult compute_creation_check = vkCreateDevice(compute_device_phys.device, &compute_create_info, nullptr, &compute_device);
+
+  if (render_creation_check != VK_SUCCESS) {
+    std::cout << "FAILED TO CREATE RENDER DEVICE!\n";
+    abort();
+  }
+  if (compute_creation_check != VK_SUCCESS) {
+    std::cout << "FAILED TO CREATE COMPUTE DEVICE!\n";
+    abort();
+  }
+
+  std::cout << "Initialized logical devices...\n";
 }
 
   /* Utility */
 PickDeviceResult Engine::device_setup(bool compute, const char** ext_list, uint32_t list_size) { 
-  RankDevicesResult ranking_result = rank_devices(compute);
   PickDeviceResult result;
+
   if (!compute) {
-    for(uint32_t i = 0; i < ranking_result.queue_count; ++i) {
-      VkBool32 check;
-      vkGetPhysicalDeviceSurfaceSupportKHR(ranking_result.first_device, i, surface, &check);
-      if (check) {
-        result.present_queue_index = i;
-        result.device = ranking_result.first_device;
-        break;
-      }
-    }
-    for(uint32_t i = 0; i < ranking_result.queue_count; ++i) {
-      VkBool32 check;
-      vkGetPhysicalDeviceSurfaceSupportKHR(ranking_result.second_device, i, surface, &check);
-      if (check) {
-        result.present_queue_index = i;
-        result.device = ranking_result.second_device;
-        break;
-      }
-    }
-  } 
-}
-
-RankDevicesResult Engine::rank_devices(bool compute) {
-  uint32_t device_count;
-  vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
-
-  VkPhysicalDevice physical_devices[device_count];
-  vkEnumeratePhysicalDevices(instance, &device_count, physical_devices);
-
-  VkPhysicalDevice primary[device_count];
-  VkPhysicalDevice secondary[device_count];
-
-  for(uint32_t i = 0; i < device_count; ++i) {
-    VkPhysicalDeviceProperties device_props;
-    vkGetPhysicalDeviceProperties(physical_devices[i], &device_props);
-    uint32_t queue_prop_count;
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &queue_prop_count, nullptr);
-    VkQueueFamilyProperties queue_props[queue_prop_count];
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &queue_prop_count, queue_props);
-
-    bool compute_support = false;
-    bool graphics_support = false;
-
-    for(uint32_t j = 0; j < queue_prop_count; ++j) {
-      if (queue_props[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-        graphics_support = true;
-      }
-      if (queue_props[j].queueFlags & VK_QUEUE_COMPUTE_BIT) {
-        compute_support = true;
-      }
-    }
-
-    if (!compute) {
-      if (
-      device_props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && 
-      graphics_support
-      )
-        primary[i] = physical_devices[i];
-      else if (graphics_support)
-        secondary[i] = physical_devices[i];
-    } else {
-      if (
-      device_props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU && 
-      compute_support
-      )
-        primary[i] = physical_devices[i];
-      else if (compute_support) 
-        secondary[i] = physical_devices[i];
-    }
-    
+    result = render_device_setup(ext_list, list_size);
   }
+  else 
+    result = compute_device_setup(ext_list, list_size);
 
-  uint32_t max = 0;
-  VkPhysicalDevice best_choice = physical_devices[0];
-  VkPhysicalDevice second_choice = physical_devices[0];
-
-  for(uint32_t i = 0; i < device_count; ++i) {
-    uint32_t count = 0;
-    for(uint32_t j = 0; j < device_count; ++j) {
-      if (physical_devices[i] == primary[j]) 
-        count += 1;
-    }
-    if (count > max) {
-      max = count;
-      second_choice = best_choice;
-      best_choice = primary[i];
-    }
-    else if (count == max) {
-      uint32_t max_best = 0;
-      uint32_t max_curr = 0;
-      for(uint32_t k = 0; k < device_count; ++k) {
-        if (best_choice == secondary[k]) {
-          max_best += 1;
-        } else if (primary[i] == secondary[k]) {
-          max_curr += 1;
-        }
-      }
-      if (max_curr > max_best) {
-        second_choice = best_choice;
-        best_choice = primary[i];
-      }
-    }
-  }
-
-  uint32_t queue_count;
-  vkGetPhysicalDeviceQueueFamilyProperties(best_choice, &queue_count, nullptr);
-  RankDevicesResult result { 
-    .first_device = best_choice,
-    .second_device = second_choice,
-    .queue_count = queue_count 
-  };
   return result;
 }
 
-bool Engine::check_device_ext(VkPhysicalDevice dvc, VkDeviceCreateInfo *create_info) {
-  return true;
+PickDeviceResult Engine::render_device_setup(const char** ext_list, uint32_t list_size) {
+  uint32_t device_count;
+  vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
+  VkPhysicalDevice devices[device_count];
+  vkEnumeratePhysicalDevices(instance, &device_count, devices);
+
+  PickDeviceResult secondary;
+  
+  for(uint32_t device_index = 0; device_index < device_count; ++device_index) {
+    PickDeviceResult prelim_result;
+    prelim_result.device = devices[device_index];
+    uint32_t queue_count;
+    vkGetPhysicalDeviceQueueFamilyProperties(devices[device_index], &queue_count, nullptr);
+    VkQueueFamilyProperties queue_props[queue_count];
+    vkGetPhysicalDeviceQueueFamilyProperties(devices[device_index], &queue_count, queue_props);
+    for(uint32_t queue_index = 0; queue_index < queue_count; ++queue_index) {
+      VkBool32 pres_check;
+      vkGetPhysicalDeviceSurfaceSupportKHR(devices[device_index], queue_index, surface, &pres_check);
+      if (pres_check) {
+        prelim_result.present_found = true;
+        prelim_result.present_queue_index = queue_index;
+      }
+      if (queue_props[queue_index].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        prelim_result.graphics_found = true;
+        prelim_result.graphics_queue_index = queue_index;
+      }
+    }
+    uint32_t extension_count;
+    vkEnumerateDeviceExtensionProperties(devices[device_index], nullptr, &extension_count, nullptr);
+    VkExtensionProperties ext_props[extension_count];
+    vkEnumerateDeviceExtensionProperties(devices[device_index], nullptr, &extension_count, ext_props);
+    uint32_t check_ext_count = 0;
+    for(uint32_t ext_list_index = 0; ext_list_index < list_size; ++ext_list_index) {
+      for(uint32_t extension_index = 0; extension_index < extension_count; ++extension_index) {
+        if (strcmp(ext_list[ext_list_index], ext_props[extension_index].extensionName) == 0) {
+          check_ext_count += 1;
+        }
+      }
+      if (check_ext_count == list_size) {
+        prelim_result.extensions_support = true;
+        break;
+      }
+    }
+
+    if 
+    (
+      prelim_result.present_found && 
+      prelim_result.graphics_found && 
+      prelim_result.extensions_support || 
+      list_size == 0
+    ) 
+    {
+      VkPhysicalDeviceProperties device_props;
+      vkGetPhysicalDeviceProperties(devices[device_index], &device_props);
+      if (device_props.deviceType & VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+        // This returns the primary choice (all boxes ticked)
+        return prelim_result;
+      }
+      else
+        secondary = prelim_result;
+    }
+  }
+
+  // Primary choice has already been found and returned, so just return secondary
+  return secondary;
 }
 
-bool Engine::check_device_layers(VkPhysicalDevice dvc, VkDeviceCreateInfo *create_info) {
-  return true;
+PickDeviceResult Engine::compute_device_setup(const char** ext_list, uint32_t list_size) {
+  uint32_t device_count;
+  vkEnumeratePhysicalDevices(instance ,&device_count, nullptr);
+  VkPhysicalDevice devices[device_count];
+  vkEnumeratePhysicalDevices(instance, &device_count, devices);
+
+  PickDeviceResult secondary;
+
+  for(uint32_t device_index = 0; device_index < device_count; ++device_index) {
+
+    PickDeviceResult prelim_result;
+    prelim_result.device = devices[device_index];
+    
+    uint32_t queue_count;
+    vkGetPhysicalDeviceQueueFamilyProperties(devices[device_index], &queue_count, nullptr);
+    VkQueueFamilyProperties queues[queue_count];
+    vkGetPhysicalDeviceQueueFamilyProperties(devices[device_index], &queue_count, queues);
+    for(uint32_t queue_index = 0; queue_index < queue_count; ++queue_index) {
+      if (queues[queue_index].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+        prelim_result.compute_found = true;
+        prelim_result.compute_queue_index = queue_index;
+      }
+    }
+
+    for(uint32_t ext_list_index = 0; ext_list_index < list_size; ++ext_list_index) {
+      uint32_t extension_count;
+      vkEnumerateDeviceExtensionProperties(devices[device_index], nullptr, &extension_count, nullptr);
+      VkExtensionProperties extension_props[extension_count];
+      vkEnumerateDeviceExtensionProperties(devices[device_index], nullptr, &extension_count, extension_props);
+      uint32_t ext_check_count = 0;
+      for(uint32_t extension_index = 0; extension_index < extension_count; ++extension_index) {
+        if (strcmp(ext_list[ext_list_index], extension_props[extension_index].extensionName) == 0) {
+          ext_check_count += 1;
+        }
+      }
+
+      if (ext_check_count == list_size) {
+        prelim_result.extensions_support = true;
+        break;
+      }
+    }
+
+    if 
+    (
+      prelim_result.compute_found && 
+      prelim_result.extensions_support || 
+      list_size == 0
+    ) 
+    {
+      VkPhysicalDeviceProperties device_props;
+      vkGetPhysicalDeviceProperties(devices[device_index], &device_props);
+      if (device_props.deviceType & VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) 
+        return prelim_result;
+      else 
+        secondary = prelim_result;
+    }
+  }
+  return secondary;
 }
 
   /* Debug */
