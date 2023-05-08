@@ -67,10 +67,12 @@ void Engine::init_window() {
   glfwInit();
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan Engine", nullptr, nullptr);
   
+  glfwSetWindowUserPointer(window, this);
   glfwSetKeyCallback(window, key_callback);
+  glfwSetWindowSizeCallback(window, resize_callback);
 }
 
 void Engine::init_instance() {
@@ -348,6 +350,10 @@ void Engine::init_swapchain() {
     abort();
   }
 
+  swapchain_settings.color_space = create_info_swapchain.imageColorSpace;
+  swapchain_settings.image_format = create_info_swapchain.imageFormat;
+  swapchain_settings.present_mode = create_info_swapchain.presentMode;
+
   VkResult creation_check_swapchain = 
     vkCreateSwapchainKHR(devices.graphics, &create_info_swapchain, nullptr, &swapchain);
   if (creation_check_swapchain != VK_SUCCESS) {
@@ -365,6 +371,49 @@ void Engine::init_swapchain() {
 void Engine::handle_input() {
   while(!glfwWindowShouldClose(window)) 
     glfwPollEvents();
+}
+
+void Engine::recreate_swapchain() {
+  VkSwapchainKHR old_swapchain = swapchain;
+
+  VkSurfaceCapabilitiesKHR surface_capabilities;
+  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(devices.graphics_physical, surface, &surface_capabilities);
+
+  VkSwapchainCreateInfoKHR create_info_swapchain;
+  create_info_swapchain.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  create_info_swapchain.pNext = nullptr;
+  create_info_swapchain.flags = 0x0;
+  create_info_swapchain.surface = surface;
+  create_info_swapchain.imageExtent = surface_capabilities.currentExtent;
+  create_info_swapchain.preTransform = surface_capabilities.currentTransform;
+  create_info_swapchain.imageArrayLayers = 1;
+  create_info_swapchain.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  create_info_swapchain.queueFamilyIndexCount = 0;
+  create_info_swapchain.pQueueFamilyIndices = nullptr;
+  create_info_swapchain.clipped = VK_TRUE;
+  create_info_swapchain.oldSwapchain = old_swapchain;
+  create_info_swapchain.presentMode = swapchain_settings.present_mode;
+  create_info_swapchain.imageFormat = swapchain_settings.image_format;
+  create_info_swapchain.imageColorSpace = swapchain_settings.color_space;
+  create_info_swapchain.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  create_info_swapchain.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  create_info_swapchain.minImageCount = 2;
+
+  VkResult creation_check_swapchain = 
+    vkCreateSwapchainKHR(devices.graphics, &create_info_swapchain, nullptr, &swapchain);
+
+  if (creation_check_swapchain != VK_SUCCESS) {
+    std::cerr << "ERROR RECREATING SWAPCHAIN! (Aborting...)\n";
+    abort();
+  }
+  std::cout << "Swapchain recreated after resize...\n";
+  vkDestroySwapchainKHR(devices.graphics, old_swapchain, nullptr);
+}
+
+void Engine::resize_callback(GLFWwindow* window, int width, int height) {
+  Engine* p_user = 
+    reinterpret_cast<Engine*>(glfwGetWindowUserPointer(window));
+  p_user->recreate_swapchain();
 }
 
 void Engine::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {

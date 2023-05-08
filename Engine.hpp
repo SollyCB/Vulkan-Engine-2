@@ -66,6 +66,12 @@ struct SurfaceFormatResult {
   bool tuple_1 = false;
 };
 
+struct SwapchainSettings {
+  VkPresentModeKHR present_mode;
+  VkFormat image_format;
+  VkColorSpaceKHR color_space;
+};
+
 struct Engine {
 public:
   void run(Allocator* allocator);
@@ -79,6 +85,7 @@ private:
   VkInstance instance;
   Devices devices;
   VkSwapchainKHR swapchain;
+  SwapchainSettings swapchain_settings;
 
   // Initializations
   void init(Allocator* allocator);
@@ -91,6 +98,8 @@ private:
 
   // Running
   void handle_input();
+  void recreate_swapchain();
+  static void resize_callback(GLFWwindow* window, int width, int height);
   static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
   
   // Utility
