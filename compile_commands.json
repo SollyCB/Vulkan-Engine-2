@@ -1,7 +1,7 @@
 [
 {
   "directory": "/home/solly/code/cpp/Vulk-initial/build",
-  "command": "/usr/bin/c++   -g -std=gnu++17 -o CMakeFiles/include.dir/include/vk_mem_alloc.cpp.o -c /home/solly/code/cpp/Vulk-initial/include/vk_mem_alloc.cpp",
+  "command": "/usr/bin/c++   -g -std=gnu++17 -o CMakeFiles/lib_include.dir/include/vk_mem_alloc.cpp.o -c /home/solly/code/cpp/Vulk-initial/include/vk_mem_alloc.cpp",
   "file": "/home/solly/code/cpp/Vulk-initial/include/vk_mem_alloc.cpp"
 },
 {

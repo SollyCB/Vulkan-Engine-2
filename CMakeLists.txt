@@ -19,7 +19,7 @@ set(GCC_COVERAGE_LINK_FLAGS "-lglfw" "-lvulkan" "-ldl" "-lpthread" "-lX11" "-lXx
 set(INCLUDES 
   include/vk_mem_alloc.cpp
 )
-add_library(include STATIC ${INCLUDES})
+add_library(lib_include STATIC ${INCLUDES})
 
 set(SOURCE_FILES 
   main.cpp
@@ -32,6 +32,8 @@ add_executable(Vulk-bin ${SOURCE_FILES})
 
 target_compile_options(Vulk-bin PRIVATE "${GCC_COVERAGE_COMPILE_FLAGS}")
 target_link_libraries(Vulk-bin PRIVATE "${GCC_COVERAGE_LINK_FLAGS}")
+
+target_link_libraries(Vulk-bin PRIVATE lib_include)
 
 target_include_directories(Vulk-bin PUBLIC 
   "${PROJECT_BINARY_DIR}" 

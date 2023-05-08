@@ -2,9 +2,14 @@
 
 #include <iostream>
 #include <vulkan/vulkan.hpp> 
+#include <vulkan/vulkan_core.h>
+
 // Must come after vulkan include
 #include <GLFW/glfw3.h>
-#include <vulkan/vulkan_core.h>
+
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#include "include/vk_mem_alloc.h"
 
 namespace Sol {
 
@@ -12,7 +17,41 @@ namespace Sol {
 #define HEIGHT 600
 
   /* Public members */
-void Engine::init() {
+void Engine::run(Allocator* allocator) {
+  init(allocator);
+
+  handle_input();
+}
+
+void Engine::kill() { 
+
+  vkDestroySwapchainKHR(devices.graphics, swapchain, nullptr);
+
+  vmaDestroyAllocator(allocators.graphics);
+  vmaDestroyAllocator(allocators.compute);
+
+  vkDestroyDevice(devices.graphics, nullptr);
+  vkDestroyDevice(devices.compute, nullptr);
+
+  vkDestroySurfaceKHR(instance, surface, nullptr);
+
+#if V_LAYERS 
+  DestroyDebugUtilsMessengerEXT(instance, debug_messenger, nullptr);
+#endif
+
+  vkDestroyInstance(instance, nullptr);
+
+  glfwDestroyWindow(window);
+  glfwTerminate();
+}
+
+  /* Private members */
+
+// Initialization
+void Engine::init(Allocator* allocator) {
+
+  allocators.cpu = allocator;
+
   init_window(); 
   init_instance();
 #if V_LAYERS 
@@ -20,27 +59,10 @@ void Engine::init() {
 #endif
   init_surface();
   init_devices();
+  init_allocators();
+  init_swapchain();
 }
 
-void Engine::kill() { 
-
-#if V_LAYERS 
-  DestroyDebugUtilsMessengerEXT(instance, debug_messenger, nullptr);
-#endif
-
-  vkDestroyDevice(render_device, nullptr);
-  vkDestroyDevice(compute_device, nullptr);
-  vkDestroySurfaceKHR(instance, surface, nullptr);
-  vkDestroyInstance(instance, nullptr);
-
-  glfwDestroyWindow(window);
-  glfwTerminate();
-}
-
-GLFWwindow* Engine::get_window() {
-  return window;
-}
-  /* Private members */
 void Engine::init_window() {
   glfwInit();
 
@@ -69,10 +91,10 @@ void Engine::init_instance() {
   const char** glfw_ext = glfwGetRequiredInstanceExtensions(&glfw_ext_count);
 
 #if V_LAYERS
-  std::cout << "Initializing in debug mode...\n";
+  std::cout << "\n*** DEBUG MODE ON ***\n\n";
   const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
   Vec<const char*> exts;
-  exts.init(glfw_ext_count + 1, cpu_allocator);
+  exts.init(glfw_ext_count + 1, allocators.cpu);
   mem_cpy(exts.data, glfw_ext, 8 * glfw_ext_count);
   exts.length = glfw_ext_count;
   exts.push(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -86,6 +108,7 @@ void Engine::init_instance() {
   instance_info.pNext = 
     reinterpret_cast<VkDebugUtilsMessengerCreateInfoEXT*>(&debug_create_info);
 #else 
+  std::cout << "\n*** RELEASE MODE ***\n\n";
   instance_info.enabledLayerCount = 0;
   instance_info.ppEnabledExtensionNames = glfw_ext;
   instance_info.enabledExtensionCount = glfw_ext_count;
@@ -94,10 +117,10 @@ void Engine::init_instance() {
 
   VkResult check = vkCreateInstance(&instance_info, nullptr, &instance);
   if (check != VK_SUCCESS) {
-    std::cerr << "FAILED TO INIT INSTANCE\n";
+    std::cerr << "FAILED TO INIT INSTANCE (Aborting)...\n";
     abort();
   }
-  std::cout << "VkInstance Initialized...\n";
+  std::cout << "Initialized VkInstance...\n";
 
 #if V_LAYERS
   exts.kill();
@@ -107,97 +130,251 @@ void Engine::init_instance() {
 void Engine::init_surface() {
   VkResult check = glfwCreateWindowSurface(instance, window, nullptr, &surface);
   if (check != VK_SUCCESS) {
-    std::cerr << "FAILED TO INIT SURFACE\n";
+    std::cerr << "FAILED TO INIT SURFACE (Aborting)...\n";
     abort();
   }
+  std::cout << "Initialized VkSurface...\n";
 }
 
 void Engine::init_devices() {
 
-  const char* render_extensions[] = RENDER_EXTENSIONS;
-  const char* compute_extensions[] = COMPUTE_EXTENSIONS;
+  const char* ext_list_graphics[] = RENDER_EXTENSIONS;
+  const char* ext_list_compute[] = COMPUTE_EXTENSIONS;
 
   bool compute = true;
-  uint32_t render_list_size = sizeof(render_extensions) / sizeof(const char*);
-  uint32_t compute_list_size = sizeof(compute_extensions) / sizeof(const char*);
+  uint32_t ext_list_size_graphics = sizeof(ext_list_graphics) / sizeof(const char*);
+  uint32_t ext_list_size_compute = sizeof(ext_list_compute) / sizeof(const char*);
 
-  PickDeviceResult render_device_phys = 
-    device_setup(!compute, render_extensions, render_list_size);
-  PickDeviceResult compute_device_phys = 
-    device_setup(compute, compute_extensions, compute_list_size);
+  DevicePickResult device_pick_result_graphics = 
+    device_setup(!compute, ext_list_graphics, ext_list_size_graphics);
+  DevicePickResult device_pick_result_compute = 
+    device_setup(compute, ext_list_compute, ext_list_size_compute);
 
   const float queue_priorities[] = { 1.0f };
 
-  uint32_t render_queue_indices[] = {
-    render_device_phys.graphics_queue_index,
-    render_device_phys.present_queue_index,
+  uint32_t queue_indices_graphics[] = {
+    device_pick_result_graphics.graphics_queue_index,
+    device_pick_result_graphics.present_queue_index,
   };
-  uint32_t render_device_queue_count = 2;
-  VkDeviceQueueCreateInfo render_queue_infos[render_device_queue_count];
+  uint32_t queue_count_graphics = 2;
+  VkDeviceQueueCreateInfo queue_infos_graphics[queue_count_graphics];
 
-  for(uint32_t i = 0; i < render_device_queue_count; ++i) {
-    render_queue_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    render_queue_infos[i].pNext = nullptr;
-    render_queue_infos[i].flags = 0x0;
-    render_queue_infos[i].queueFamilyIndex = render_queue_indices[i];
-    render_queue_infos[i].queueCount = 1;
-    render_queue_infos[i].pQueuePriorities = queue_priorities;
+  for(uint32_t i = 0; i < queue_count_graphics; ++i) {
+    queue_infos_graphics[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_infos_graphics[i].pNext = nullptr;
+    queue_infos_graphics[i].flags = 0x0;
+    queue_infos_graphics[i].queueFamilyIndex = queue_indices_graphics[i];
+    queue_infos_graphics[i].queueCount = 1;
+    queue_infos_graphics[i].pQueuePriorities = queue_priorities;
   }
 
-  VkDeviceCreateInfo render_create_info;
-  render_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  render_create_info.pNext = nullptr;
-  render_create_info.flags = 0x0;
-  render_create_info.queueCreateInfoCount = render_device_queue_count;
-  render_create_info.pQueueCreateInfos = render_queue_infos;
-  render_create_info.enabledLayerCount = 0;
-  render_create_info.ppEnabledLayerNames = nullptr;
-  render_create_info.enabledExtensionCount = render_list_size;
-  render_create_info.ppEnabledExtensionNames = render_extensions;
+  VkDeviceCreateInfo create_info_graphics;
+  create_info_graphics.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  create_info_graphics.pNext = nullptr;
+  create_info_graphics.flags = 0x0;
+  create_info_graphics.queueCreateInfoCount = queue_count_graphics;
+  create_info_graphics.pQueueCreateInfos = queue_infos_graphics;
+  create_info_graphics.enabledLayerCount = 0;
+  create_info_graphics.ppEnabledLayerNames = nullptr;
+  create_info_graphics.enabledExtensionCount = ext_list_size_graphics;
+  create_info_graphics.ppEnabledExtensionNames = ext_list_graphics;
   // NOTE: I am interested to see when I will have to come back to this...
-  render_create_info.pEnabledFeatures = nullptr;
+  create_info_graphics.pEnabledFeatures = nullptr;
 
-  VkDeviceQueueCreateInfo compute_queue_infos[1];
-  compute_queue_infos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  compute_queue_infos[0].pNext = nullptr;
-  compute_queue_infos[0].flags = 0x0;
-  compute_queue_infos[0].queueFamilyIndex = compute_device_phys.compute_queue_index;
-  compute_queue_infos[0].queueCount = 1;
-  compute_queue_infos[0].pQueuePriorities = queue_priorities;
+  VkDeviceQueueCreateInfo queue_infos_compute[1];
+  queue_infos_compute[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  queue_infos_compute[0].pNext = nullptr;
+  queue_infos_compute[0].flags = 0x0;
+  queue_infos_compute[0].queueFamilyIndex = device_pick_result_compute.compute_queue_index;
+  queue_infos_compute[0].queueCount = 1;
+  queue_infos_compute[0].pQueuePriorities = queue_priorities;
 
-  VkDeviceCreateInfo compute_create_info;
-  compute_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  compute_create_info.pNext = nullptr;
-  compute_create_info.flags = 0x0;
-  compute_create_info.queueCreateInfoCount = 1;
-  compute_create_info.pQueueCreateInfos = compute_queue_infos;
-  compute_create_info.enabledLayerCount = 0;
-  compute_create_info.ppEnabledLayerNames = nullptr;
-  compute_create_info.enabledExtensionCount = compute_list_size;
-  compute_create_info.ppEnabledExtensionNames = compute_extensions;
+  VkDeviceCreateInfo create_info_compute;
+  create_info_compute.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  create_info_compute.pNext = nullptr;
+  create_info_compute.flags = 0x0;
+  create_info_compute.queueCreateInfoCount = 1;
+  create_info_compute.pQueueCreateInfos = queue_infos_compute;
+  create_info_compute.enabledLayerCount = 0;
+  create_info_compute.ppEnabledLayerNames = nullptr;
+  create_info_compute.enabledExtensionCount = ext_list_size_compute;
+  create_info_compute.ppEnabledExtensionNames = ext_list_compute;
   // NOTE: I am interested to see when I will have to come back to this...
-  compute_create_info.pEnabledFeatures = nullptr;
+  create_info_compute.pEnabledFeatures = nullptr;
 
-  VkResult render_creation_check = vkCreateDevice(render_device_phys.device, &render_create_info, nullptr, &render_device);
-  // TODO: Something in the compute creation check is segfaulting...
-  // There will some stupid unitialized pointer in the compute setup func...
-  VkResult compute_creation_check = vkCreateDevice(compute_device_phys.device, &compute_create_info, nullptr, &compute_device);
+  VkResult creation_check_graphics = vkCreateDevice(device_pick_result_graphics.device, &create_info_graphics, nullptr, &devices.graphics);
+  VkResult creation_check_compute = vkCreateDevice(device_pick_result_compute.device, &create_info_compute, nullptr, &devices.compute);
 
-  if (render_creation_check != VK_SUCCESS) {
-    std::cout << "FAILED TO CREATE RENDER DEVICE!\n";
-    abort();
+  bool creation_check_top = true;
+  
+  if (creation_check_graphics != VK_SUCCESS) {
+    std::cout << "Failed to create render device!\n";
+    creation_check_top = false;
   }
-  if (compute_creation_check != VK_SUCCESS) {
-    std::cout << "FAILED TO CREATE COMPUTE DEVICE!\n";
-    abort();
+  if (creation_check_compute != VK_SUCCESS) {
+    std::cout << "Failed to create compute device!\n";
+    creation_check_top = false;
   }
+
+  if (!creation_check_top) {
+    std::cerr << "FAILED TO INIT LOGICAL DEVICES (Aborting)...\n";
+  }
+
+  devices.graphics_physical = device_pick_result_graphics.device;
+  devices.graphics_queue = device_pick_result_graphics.graphics_queue_index;
+  devices.present_queue = device_pick_result_graphics.present_queue_index;
+
+  devices.compute_physical = device_pick_result_compute.device;
+  devices.compute_queue = device_pick_result_compute.compute_queue_index;
 
   std::cout << "Initialized logical devices...\n";
 }
 
+void Engine::init_allocators() {
+  
+  VmaVulkanFunctions vulkan_functions = {};
+  vulkan_functions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+  vulkan_functions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+ 
+  VmaAllocatorCreateInfo gpu_allocator_info_graphics = {};
+  gpu_allocator_info_graphics.vulkanApiVersion = VK_API_VERSION_1_3;
+  gpu_allocator_info_graphics.physicalDevice = devices.graphics_physical;
+  gpu_allocator_info_graphics.device = devices.graphics;
+  gpu_allocator_info_graphics.instance = instance;
+  gpu_allocator_info_graphics.pVulkanFunctions = &vulkan_functions;
+
+  VmaAllocatorCreateInfo gpu_allocator_info_compute = {};
+  gpu_allocator_info_compute.vulkanApiVersion = VK_API_VERSION_1_3;
+  gpu_allocator_info_compute.physicalDevice = devices.compute_physical;
+  gpu_allocator_info_compute.device = devices.compute;
+  gpu_allocator_info_compute.instance = instance;
+  gpu_allocator_info_compute.pVulkanFunctions = &vulkan_functions;
+ 
+  VmaAllocator gpu_allocator_graphics;
+  VkResult creation_check_alloc_graphics = vmaCreateAllocator(&gpu_allocator_info_graphics, &gpu_allocator_graphics);
+  VmaAllocator gpu_allocator_compute;
+  VkResult creation_check_alloc_compute = vmaCreateAllocator(&gpu_allocator_info_graphics, &gpu_allocator_compute);
+
+  bool creation_check_alloc_top = true;
+  if (creation_check_alloc_graphics != VK_SUCCESS) {
+    std::cerr << "Failed to create compute allocator!\n";
+    creation_check_alloc_top = false;
+  }
+  if (creation_check_alloc_compute != VK_SUCCESS) {
+    std::cerr << "Failed to create compute allocator!\n";
+    creation_check_alloc_top = false;
+  }
+
+  if (!creation_check_alloc_top) {
+    std::cerr << "FAILED TO INITIALIZE GPU ALLOCATORS! (Aborting)...\n";
+    abort();
+  }
+
+  allocators.graphics = gpu_allocator_graphics;
+  allocators.compute = gpu_allocator_compute;
+  std::cout << "Initialized GPU allocators...\n";
+}
+
+void Engine::init_swapchain() {
+  PresentModes present_modes;
+  get_present_mode_support(&present_modes);
+
+  SurfaceFormatResult surface_format_result;
+  get_format_color_space_support(&surface_format_result);
+
+  VkSurfaceCapabilitiesKHR surface_capabilities;
+  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(devices.graphics_physical, surface, &surface_capabilities);
+
+  VkSwapchainCreateInfoKHR create_info_swapchain;
+  create_info_swapchain.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  create_info_swapchain.pNext = nullptr;
+  create_info_swapchain.flags = 0x0;
+  create_info_swapchain.surface = surface;
+  create_info_swapchain.minImageCount = 2;
+  create_info_swapchain.imageExtent = surface_capabilities.currentExtent;
+  create_info_swapchain.preTransform = surface_capabilities.currentTransform;
+  create_info_swapchain.imageArrayLayers = 1;
+  create_info_swapchain.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  create_info_swapchain.queueFamilyIndexCount = 0;
+  create_info_swapchain.pQueueFamilyIndices = nullptr;
+  create_info_swapchain.clipped = VK_TRUE;
+  create_info_swapchain.oldSwapchain = VK_NULL_HANDLE;
+
+  if (present_modes.mailbox)
+    create_info_swapchain.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+  else 
+    create_info_swapchain.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+  if (surface_format_result.tuple_1) {
+    create_info_swapchain.imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
+    create_info_swapchain.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+  } else {
+    create_info_swapchain.imageFormat = surface_format_result.first_specified.format;
+    create_info_swapchain.imageColorSpace = surface_format_result.first_specified.colorSpace;
+  }
+
+  bool top_check_swapchain_creation = true;
+  uint32_t err_msgs_size = 3;
+  const char* err_msgs[err_msgs_size]; 
+  for(uint32_t i = 0; i < err_msgs_size; ++i) {
+    err_msgs[i] = "\0";
+  }
+  
+  if (surface_capabilities.minImageCount >= 2) 
+    create_info_swapchain.minImageCount = 2;
+  else {
+    top_check_swapchain_creation = false;
+    err_msgs[0] = "Insufficient minImageCount (count < 2)\n";
+  }
+  if (surface_capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+    create_info_swapchain.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  else {
+    top_check_swapchain_creation = false;
+    err_msgs[1] = "Missing Alpha Opaque Bit (CompositeAlphaFlags)\n";
+  }
+  if (surface_capabilities.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) 
+    create_info_swapchain.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; 
+  else {
+    top_check_swapchain_creation = false;
+    err_msgs[2] = "Missing Color Attachment bit (ImageUsage)\n";
+  }
+
+  if (!top_check_swapchain_creation) {
+    std::cerr << "ERRORS IN SWAPCHAIN CREATION:\n";
+    for(uint32_t i = 0; i < err_msgs_size; ++i) {
+      if (strcmp(err_msgs[i], "\0") != 0) 
+        std::cerr << "  " << err_msgs[i];
+    }
+    std::cerr << "(Aborting...)\n";
+    abort();
+  }
+
+  VkResult creation_check_swapchain = 
+    vkCreateSwapchainKHR(devices.graphics, &create_info_swapchain, nullptr, &swapchain);
+  if (creation_check_swapchain != VK_SUCCESS) {
+    std::cerr << "ERROR INITIALIZING SWAPCHAIN (Aborting...)\n";
+    abort();
+  }
+
+  std::cout << "Initialized Swapchain...\n";
+}
+
+  /* End Initializations */
+
+  /* Running */
+
+void Engine::handle_input() {
+  while(!glfwWindowShouldClose(window)) 
+    glfwPollEvents();
+}
+
+void Engine::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+  if (key == GLFW_KEY_Q && action == GLFW_PRESS)
+    glfwSetWindowShouldClose(window, true);
+}
+
   /* Utility */
-PickDeviceResult Engine::device_setup(bool compute, const char** ext_list, uint32_t list_size) { 
-  PickDeviceResult result;
+DevicePickResult Engine::device_setup(bool compute, const char** ext_list, uint32_t list_size) { 
+  DevicePickResult result;
 
   if (!compute) {
     result = render_device_setup(ext_list, list_size);
@@ -208,16 +385,16 @@ PickDeviceResult Engine::device_setup(bool compute, const char** ext_list, uint3
   return result;
 }
 
-PickDeviceResult Engine::render_device_setup(const char** ext_list, uint32_t list_size) {
+DevicePickResult Engine::render_device_setup(const char** ext_list, uint32_t list_size) {
   uint32_t device_count;
   vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
   VkPhysicalDevice devices[device_count];
   vkEnumeratePhysicalDevices(instance, &device_count, devices);
 
-  PickDeviceResult secondary;
+  DevicePickResult secondary;
   
   for(uint32_t device_index = 0; device_index < device_count; ++device_index) {
-    PickDeviceResult prelim_result;
+    DevicePickResult prelim_result;
     prelim_result.device = devices[device_index];
     uint32_t queue_count;
     vkGetPhysicalDeviceQueueFamilyProperties(devices[device_index], &queue_count, nullptr);
@@ -275,17 +452,17 @@ PickDeviceResult Engine::render_device_setup(const char** ext_list, uint32_t lis
   return secondary;
 }
 
-PickDeviceResult Engine::compute_device_setup(const char** ext_list, uint32_t list_size) {
+DevicePickResult Engine::compute_device_setup(const char** ext_list, uint32_t list_size) {
   uint32_t device_count;
   vkEnumeratePhysicalDevices(instance ,&device_count, nullptr);
   VkPhysicalDevice devices[device_count];
   vkEnumeratePhysicalDevices(instance, &device_count, devices);
 
-  PickDeviceResult secondary;
+  DevicePickResult secondary;
 
   for(uint32_t device_index = 0; device_index < device_count; ++device_index) {
 
-    PickDeviceResult prelim_result;
+    DevicePickResult prelim_result;
     prelim_result.device = devices[device_index];
     
     uint32_t queue_count;
@@ -335,6 +512,44 @@ PickDeviceResult Engine::compute_device_setup(const char** ext_list, uint32_t li
   return secondary;
 }
 
+void Engine::get_present_mode_support(PresentModes *present_modes) {
+  uint32_t present_mode_count;
+  vkGetPhysicalDeviceSurfacePresentModesKHR(devices.graphics_physical, surface, &present_mode_count, nullptr);
+  VkPresentModeKHR modes[present_mode_count];  
+  vkGetPhysicalDeviceSurfacePresentModesKHR(devices.graphics_physical, surface, &present_mode_count, nullptr);
+
+  for(uint32_t i = 0; i < present_mode_count; ++i) {
+    if (modes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) 
+      present_modes->immediate = true;
+    if (modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) 
+      present_modes->mailbox = true;
+    if (modes[i] == VK_PRESENT_MODE_FIFO_KHR) 
+      present_modes->fifo = true;
+  }
+
+}
+
+void Engine::get_format_color_space_support(SurfaceFormatResult *surface_format_result) {
+  uint32_t format_count;
+  vkGetPhysicalDeviceSurfaceFormatsKHR(devices.graphics_physical, surface, &format_count, nullptr);
+  VkSurfaceFormatKHR formats[format_count];
+  vkGetPhysicalDeviceSurfaceFormatsKHR(devices.graphics_physical, surface, &format_count, formats);
+
+  for(uint32_t format_index = 0; format_index < format_count; ++format_index) {
+    if (
+      formats[format_index].format == VK_FORMAT_B8G8R8A8_SRGB &&
+      formats[format_index].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
+    ) {
+      surface_format_result->tuple_1 = true;
+      break;
+    }
+  }
+  surface_format_result->tuple_1 = false;
+  surface_format_result->first_specified = formats[0];
+}
+
+  /* Utility End */
+
   /* Debug */
 #if V_LAYERS
 void Engine::init_debug_messenger() {
@@ -343,9 +558,10 @@ void Engine::init_debug_messenger() {
   VkResult check = CreateDebugUtilsMessengerEXT(instance, &debug_create_info, nullptr, &debug_messenger);
 
   if (check != VK_SUCCESS) {
-    std::cerr << "FAILED TO INIT DEBUG MESSENGER\n";
+    std::cerr << "FAILED TO INIT DEBUG MESSENGER (Aborting)...\n";
     abort();
   }
+  std::cout << "Initialized Debug Messenger...\n";
 }
 
 void Engine::populate_debug_create_info(VkDebugUtilsMessengerCreateInfoEXT* create_info) {
@@ -388,11 +604,5 @@ void Engine::DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMess
 }
 #endif
   /* END DEBUG */
-
-  /* KeyBoard input */
-void Engine::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-  if (key == GLFW_KEY_Q && action == GLFW_PRESS)
-    glfwSetWindowShouldClose(window, true);
-}
 
 } // Sol

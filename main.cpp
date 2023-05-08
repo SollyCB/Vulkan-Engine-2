@@ -14,14 +14,9 @@ int main() {
   Sol::MemoryService::instance()->init(&mem_config);
   Sol::Allocator* allocator = &Sol::MemoryService::instance()->system_allocator;
 
-  engine.cpu_allocator = allocator;
-  engine.init();
-
-  while (!glfwWindowShouldClose(engine.get_window())) { 
-    glfwPollEvents();
-  }
-
+  engine.run(allocator);
   engine.kill();
+
   Sol::MemoryService::instance()->shutdown();
   return 0;
 }
