@@ -103,6 +103,7 @@ private:
   static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
   
   // Utility
+    // Prefers integrated GPU for compute, and discrete for graphics. 
   DevicePickResult device_setup(bool compute, const char** ext_list, uint32_t list_size);
   DevicePickResult compute_device_setup(const char** ext_list, uint32_t list_size);
   DevicePickResult render_device_setup(const char** ext_list, uint32_t list_size);

@@ -16,7 +16,8 @@ namespace Sol {
 #define WIDTH 800
 #define HEIGHT 600
 
-  /* Public members */
+  /* --- Public Members Start --- */
+
 void Engine::run(Allocator* allocator) {
   init(allocator);
 
@@ -45,9 +46,12 @@ void Engine::kill() {
   glfwTerminate();
 }
 
-  /* Private members */
+    /* --- Public Members End --- */
 
-// Initialization
+    /* --- Private Members Start --- */ 
+
+ /* Initialization Start */
+
 void Engine::init(Allocator* allocator) {
 
   allocators.cpu = allocator;
@@ -154,21 +158,24 @@ void Engine::init_devices() {
 
   const float queue_priorities[] = { 1.0f };
 
-  uint32_t queue_indices_graphics[] = {
-    device_pick_result_graphics.graphics_queue_index,
-    device_pick_result_graphics.present_queue_index,
-  };
   uint32_t queue_count_graphics = 2;
   VkDeviceQueueCreateInfo queue_infos_graphics[queue_count_graphics];
 
-  for(uint32_t i = 0; i < queue_count_graphics; ++i) {
-    queue_infos_graphics[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_infos_graphics[i].pNext = nullptr;
-    queue_infos_graphics[i].flags = 0x0;
-    queue_infos_graphics[i].queueFamilyIndex = queue_indices_graphics[i];
-    queue_infos_graphics[i].queueCount = 1;
-    queue_infos_graphics[i].pQueuePriorities = queue_priorities;
-  }
+  // Queue create info graphics
+  queue_infos_graphics[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  queue_infos_graphics[0].pNext = nullptr;
+  queue_infos_graphics[0].flags = 0x0;
+  queue_infos_graphics[0].queueFamilyIndex = device_pick_result_graphics.graphics_queue_index;
+  queue_infos_graphics[0].queueCount = 1;
+  queue_infos_graphics[0].pQueuePriorities = queue_priorities;
+  
+  // Queue create info present
+  queue_infos_graphics[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  queue_infos_graphics[1].pNext = nullptr;
+  queue_infos_graphics[1].flags = 0x0;
+  queue_infos_graphics[1].queueFamilyIndex = device_pick_result_graphics.present_queue_index;
+  queue_infos_graphics[1].queueCount = 1;
+  queue_infos_graphics[1].pQueuePriorities = queue_priorities;
 
   VkDeviceCreateInfo create_info_graphics;
   create_info_graphics.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -180,8 +187,7 @@ void Engine::init_devices() {
   create_info_graphics.ppEnabledLayerNames = nullptr;
   create_info_graphics.enabledExtensionCount = ext_list_size_graphics;
   create_info_graphics.ppEnabledExtensionNames = ext_list_graphics;
-  // NOTE: I am interested to see when I will have to come back to this...
-  create_info_graphics.pEnabledFeatures = nullptr;
+  create_info_graphics.pEnabledFeatures = nullptr; // NOTE: I am interested to see when I will to come back to this...
 
   VkDeviceQueueCreateInfo queue_infos_compute[1];
   queue_infos_compute[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -201,8 +207,7 @@ void Engine::init_devices() {
   create_info_compute.ppEnabledLayerNames = nullptr;
   create_info_compute.enabledExtensionCount = ext_list_size_compute;
   create_info_compute.ppEnabledExtensionNames = ext_list_compute;
-  // NOTE: I am interested to see when I will have to come back to this...
-  create_info_compute.pEnabledFeatures = nullptr;
+  create_info_compute.pEnabledFeatures = nullptr; // NOTE: I am interested to see when I will to come back to this...
 
   VkResult creation_check_graphics = vkCreateDevice(device_pick_result_graphics.device, &create_info_graphics, nullptr, &devices.graphics);
   VkResult creation_check_compute = vkCreateDevice(device_pick_result_compute.device, &create_info_compute, nullptr, &devices.compute);
@@ -350,10 +355,6 @@ void Engine::init_swapchain() {
     abort();
   }
 
-  swapchain_settings.color_space = create_info_swapchain.imageColorSpace;
-  swapchain_settings.image_format = create_info_swapchain.imageFormat;
-  swapchain_settings.present_mode = create_info_swapchain.presentMode;
-
   VkResult creation_check_swapchain = 
     vkCreateSwapchainKHR(devices.graphics, &create_info_swapchain, nullptr, &swapchain);
   if (creation_check_swapchain != VK_SUCCESS) {
@@ -362,11 +363,17 @@ void Engine::init_swapchain() {
   }
 
   std::cout << "Initialized Swapchain...\n";
+
+  // Save settings for reinitialization of swapchain...
+  swapchain_settings.color_space = create_info_swapchain.imageColorSpace;
+  swapchain_settings.image_format = create_info_swapchain.imageFormat;
+  swapchain_settings.present_mode = create_info_swapchain.presentMode;
+
 }
 
-  /* End Initializations */
+  /* Initializations End */
 
-  /* Running */
+  /* Running Start */
 
 void Engine::handle_input() {
   while(!glfwWindowShouldClose(window)) 
@@ -420,8 +427,10 @@ void Engine::key_callback(GLFWwindow* window, int key, int scancode, int action,
   if (key == GLFW_KEY_Q && action == GLFW_PRESS)
     glfwSetWindowShouldClose(window, true);
 }
+  /* Running End */
 
-  /* Utility */
+  /* Utility Start */
+
 DevicePickResult Engine::device_setup(bool compute, const char** ext_list, uint32_t list_size) { 
   DevicePickResult result;
 
@@ -599,7 +608,7 @@ void Engine::get_format_color_space_support(SurfaceFormatResult *surface_format_
 
   /* Utility End */
 
-  /* Debug */
+  /* Debug Start */
 #if V_LAYERS
 void Engine::init_debug_messenger() {
   VkDebugUtilsMessengerCreateInfoEXT debug_create_info;
@@ -652,6 +661,6 @@ void Engine::DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMess
     }
 }
 #endif
-  /* END DEBUG */
+  /* Debug End */
 
-} // Sol
+} // mod Sol
