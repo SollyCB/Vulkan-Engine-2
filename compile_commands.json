@@ -1,27 +1,32 @@
 [
 {
   "directory": "/home/solly/code/cpp/Vulk-initial/build",
-  "command": "/usr/bin/c++   -g -std=gnu++17 -o CMakeFiles/lib_include.dir/include/vk_mem_alloc.cpp.o -c /home/solly/code/cpp/Vulk-initial/include/vk_mem_alloc.cpp",
+  "command": "/usr/bin/c++  -I/home/solly/code/cpp/Vulk-initial/include -g -std=gnu++17 -o CMakeFiles/lib-include.dir/include/vk_mem_alloc.cpp.o -c /home/solly/code/cpp/Vulk-initial/include/vk_mem_alloc.cpp",
   "file": "/home/solly/code/cpp/Vulk-initial/include/vk_mem_alloc.cpp"
 },
 {
   "directory": "/home/solly/code/cpp/Vulk-initial/build",
-  "command": "/usr/bin/c++  -I/home/solly/code/cpp/Vulk-initial/build -I/home/solly/code/cpp/Vulk-initial/build/common -I/home/solly/code/cpp/Vulk-initial/build/include -g -std=gnu++17 -o CMakeFiles/Vulk-bin.dir/main.cpp.o -c /home/solly/code/cpp/Vulk-initial/main.cpp",
+  "command": "/usr/bin/c++  -I/home/solly/code/cpp/Vulk-initial/include -g -std=gnu++17 -o CMakeFiles/lib-include.dir/include/tlsf.cpp.o -c /home/solly/code/cpp/Vulk-initial/include/tlsf.cpp",
+  "file": "/home/solly/code/cpp/Vulk-initial/include/tlsf.cpp"
+},
+{
+  "directory": "/home/solly/code/cpp/Vulk-initial/build",
+  "command": "/usr/bin/c++  -I/home/solly/code/cpp/Vulk-initial/common -g -std=gnu++17 -o CMakeFiles/Vulk-bin.dir/main.cpp.o -c /home/solly/code/cpp/Vulk-initial/main.cpp",
   "file": "/home/solly/code/cpp/Vulk-initial/main.cpp"
 },
 {
   "directory": "/home/solly/code/cpp/Vulk-initial/build",
-  "command": "/usr/bin/c++  -I/home/solly/code/cpp/Vulk-initial/build -I/home/solly/code/cpp/Vulk-initial/build/common -I/home/solly/code/cpp/Vulk-initial/build/include -g -std=gnu++17 -o CMakeFiles/Vulk-bin.dir/Engine.cpp.o -c /home/solly/code/cpp/Vulk-initial/Engine.cpp",
+  "command": "/usr/bin/c++  -I/home/solly/code/cpp/Vulk-initial/common -g -std=gnu++17 -o CMakeFiles/Vulk-bin.dir/Engine.cpp.o -c /home/solly/code/cpp/Vulk-initial/Engine.cpp",
   "file": "/home/solly/code/cpp/Vulk-initial/Engine.cpp"
 },
 {
   "directory": "/home/solly/code/cpp/Vulk-initial/build",
-  "command": "/usr/bin/c++  -I/home/solly/code/cpp/Vulk-initial/build -I/home/solly/code/cpp/Vulk-initial/build/common -I/home/solly/code/cpp/Vulk-initial/build/include -g -std=gnu++17 -o CMakeFiles/Vulk-bin.dir/common/Allocator.cpp.o -c /home/solly/code/cpp/Vulk-initial/common/Allocator.cpp",
+  "command": "/usr/bin/c++  -I/home/solly/code/cpp/Vulk-initial/common -g -std=gnu++17 -o CMakeFiles/Vulk-bin.dir/common/Allocator.cpp.o -c /home/solly/code/cpp/Vulk-initial/common/Allocator.cpp",
   "file": "/home/solly/code/cpp/Vulk-initial/common/Allocator.cpp"
 },
 {
   "directory": "/home/solly/code/cpp/Vulk-initial/build",
-  "command": "/usr/bin/c++  -I/home/solly/code/cpp/Vulk-initial/build -I/home/solly/code/cpp/Vulk-initial/build/common -I/home/solly/code/cpp/Vulk-initial/build/include -g -std=gnu++17 -o CMakeFiles/Vulk-bin.dir/common/tlsf.cpp.o -c /home/solly/code/cpp/Vulk-initial/common/tlsf.cpp",
-  "file": "/home/solly/code/cpp/Vulk-initial/common/tlsf.cpp"
+  "command": "/usr/bin/c++  -I/home/solly/code/cpp/Vulk-initial/common -g -std=gnu++17 -o CMakeFiles/Vulk-bin.dir/common/String.cpp.o -c /home/solly/code/cpp/Vulk-initial/common/String.cpp",
+  "file": "/home/solly/code/cpp/Vulk-initial/common/String.cpp"
 }
 ]

@@ -103,6 +103,7 @@ template <typename K, typename V> struct HashMap {
     capacity = cap;
     growth = capacity_to_buckets();
 
+    // TODO: reinterpret_cast
     raw_bytes =
         (uint8_t *)mem_alloca(cap + (sizeof(KeyValue) * cap), 16, allocator);
     base_group = (Group *)raw_bytes;
@@ -168,6 +169,7 @@ template <typename K, typename V> struct HashMap {
     uint8_t top7 = (hash >> 57) & 0x7f;
     BitMask mask = (base_group + (primary_index >> 4))->matchByte(top7);
     auto adjusted_index = primary_index - (primary_index % 16);
+
     Probe probe(adjusted_index, capacity - 1);
     while (probe.increment()) {
       mask = base_group[probe.pos >> 4].isFull();

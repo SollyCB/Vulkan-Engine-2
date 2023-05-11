@@ -2,8 +2,9 @@
 
 #include <emmintrin.h>
 #include <math.h>
+#include <cstdint>
 
-#include "wyhash.h"
+#include "../include/wyhash.h"
 
 template <typename T>
 inline uint64_t calculateHash(const T &value, size_t seed = 0) {

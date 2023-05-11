@@ -103,7 +103,7 @@ void Engine::init_instance() {
 
   instance_info.ppEnabledLayerNames = layers;
   instance_info.enabledLayerCount = sizeof(layers) / 8;
-  instance_info.enabledExtensionCount = exts.len();
+  instance_info.enabledExtensionCount = exts.length;
   instance_info.ppEnabledExtensionNames = exts.data;
   VkDebugUtilsMessengerCreateInfoEXT debug_create_info;
   populate_debug_create_info(&debug_create_info);

@@ -15,12 +15,6 @@ template <typename T>
 struct PopResult {
 	bool some = false;
 	T item;
-	bool is_some() {
-		return some;
-	}
-	T get() { // moves the value from item, I do not really know if this matters...
-		return std::move(item);
-	}
 };
 
 template <typename T>
@@ -52,34 +46,16 @@ struct Vec {
       push(t);
     }
   }
-  size_t len() {
-    return length;
-  }
-  size_t cap() {
-    return capacity;
-  }
   PopResult<T> pop() {
     if (!length) {
 			PopResult<T> none;
 			none.some = false;
 			return none;
 		}
-    --length; // decrement length
+    --length; 
 		return PopResult<T> { true, data[length] };
   }
   void push(T t) {
-    if (capacity == length)
-      grow();
-    data[length] = t;
-    ++length;
-  }
-  void push_ref(T& t) {
-    if (capacity == length)
-      grow();
-    data[length] = t;
-    ++length;
-  }
-  void push_ptr(T* t) {
     if (capacity == length)
       grow();
     data[length] = t;
@@ -108,19 +84,6 @@ struct Vec {
       exit(-1);
     }
     return data[i];
-  }
-};
-
-template <typename T>
-struct TempVec {
-  Vec<T> vec;
-  TempVec(size_t cap, Allocator* allocator) {
-    Vec<T> vec_;
-    vec_.init(cap, allocator);
-    vec = vec_;
-  }
-  ~TempVec() {
-    vec.kill();
   }
 };
 

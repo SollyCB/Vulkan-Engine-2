@@ -16,42 +16,16 @@ set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} ${GCC_COVERAGE_LINK_FLAGS
 set(CFLAGS "-std=c++17" "-Wextra" "-Wall" "-Werror" "-Wpedantic" "-ggdb")
 set(GCC_COVERAGE_LINK_FLAGS "-lglfw" "-lvulkan" "-ldl" "-lpthread" "-lX11" "-lXxf86vm" "-lXrandr" "-lXi")
 
-set(INCLUDES 
-  include/vk_mem_alloc.cpp
-)
-add_library(lib_include STATIC ${INCLUDES})
+add_library(lib-include STATIC "include/vk_mem_alloc.cpp" "include/tlsf.cpp")
 
-set(SOURCE_FILES 
-  main.cpp
-  Engine.cpp
+target_include_directories(lib-include PRIVATE "include")
 
-  common/Allocator.cpp
-  common/tlsf.cpp
-)
+set(SOURCE_FILES "main.cpp" "Engine.cpp" "common/Allocator.cpp" "common/String.cpp")
 add_executable(Vulk-bin ${SOURCE_FILES})
 
 target_compile_options(Vulk-bin PRIVATE "${GCC_COVERAGE_COMPILE_FLAGS}")
 target_link_libraries(Vulk-bin PRIVATE "${GCC_COVERAGE_LINK_FLAGS}")
 
-target_link_libraries(Vulk-bin PRIVATE lib_include)
+target_link_libraries(Vulk-bin PRIVATE lib-include)
 
-target_include_directories(Vulk-bin PUBLIC 
-  "${PROJECT_BINARY_DIR}" 
-  "${PROJECT_BINARY_DIR}/common" 
-  "${PROJECT_BINARY_DIR}/include" 
- )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+target_include_directories(Vulk-bin PUBLIC "common")
